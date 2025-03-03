@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const imageSchema = new mongoose.Schema({
     originalUrl: String,
-    compressedImage: Buffer,  // Store compressed image as binary
+    compressedImage: Buffer,
     createdAt: { type: Date, default: Date.now }
 });
 
