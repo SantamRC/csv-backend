@@ -5,6 +5,7 @@ const jobSchema = new mongoose.Schema({
     total: { type: Number, default: 0 },
     completed: { type: Number, default: 0 },
     status: { type: String, enum: ['in_progress', 'completed', 'failed'], default: 'in_progress' },
+    errors: [{ url: String, error: String }],
     createdAt: { type: Date, default: Date.now },
 });
 

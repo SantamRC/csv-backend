@@ -1,11 +1,80 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>CSV Upload</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 50px;
+        }
+        input[type="file"] {
+            margin: 10px 0;
+        }
+        #progressLink {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border: 1px solid #ccc;
+            display: none;
+        }
+        a {
+            color: blue;
+            text-decoration: underline;
+        }
+    </style>
 </head>
 <body>
-    <h1>CSV Processing</h1>
+
+<h2>Upload CSV File</h2>
+
+<form id="uploadForm">
+    <input type="file" id="fileInput" accept=".csv" required />
+    <button type="submit">Upload</button>
+</form>
+
+<div id="progressLink">
+    Progress URL: <a href="#" id="progressUrl" target="_blank"></a>
+</div>
+
+<script>
+document.getElementById('uploadForm').onsubmit = async function(event) {
+    event.preventDefault();
+
+    const fileInput = document.getElementById('fileInput');
+    if (!fileInput.files.length) {
+        alert('Please select a CSV file.');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+
+    try {
+        const response = await fetch('/api/images/upload-csv', {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            alert('Failed to upload file: ' + errorData.error);
+            return;
+        }
+
+        const data = await response.json();
+        const progressUrl = window.location.origin + data.progressUrl;
+
+        const progressLinkDiv = document.getElementById('progressLink');
+        const progressLink = document.getElementById('progressUrl');
+        progressLink.href = progressUrl;
+        progressLink.textContent = progressUrl;
+        progressLinkDiv.style.display = 'block';
+    } catch (error) {
+        console.error('Error uploading file:', error);
+        alert('An error occurred while uploading the file.');
+    }
+};
+</script>
+
 </body>
 </html>

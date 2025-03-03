@@ -11,18 +11,11 @@ const Job = require('../models/Job');
 const router = express.Router();
 const upload = multer({ dest: 'uploads/' });
 
-/**
- * Upload CSV and start processing images (background job)
- */
 router.post('/upload-csv', upload.single('file'), async (req, res) => {
-    if (!req.file) {
-        return res.status(400).json({ error: 'CSV file is required' });
-    }
+    if (!req.file) return res.status(400).json({ error: 'CSV file is required' });
 
     const jobId = uuidv4();
-
-    // Create Job record in MongoDB
-    const job = new Job({ jobId, status: 'in_progress', total: 0, completed: 0 });
+    const job = new Job({ jobId, status: 'in_progress', total: 0, completed: 0, errors: [] });
     await job.save();
 
     res.json({
@@ -34,41 +27,24 @@ router.post('/upload-csv', upload.single('file'), async (req, res) => {
     processCsv(req.file.path, jobId);
 });
 
-/**
- * Check job progress from MongoDB
- */
 router.get('/progress/:jobId', async (req, res) => {
-    const { jobId } = req.params;
-
-    const job = await Job.findOne({ jobId });
-    if (!job) {
-        return res.status(404).json({ error: 'Job not found' });
-    }
+    const job = await Job.findOne({ jobId: req.params.jobId });
+    if (!job) return res.status(404).json({ error: 'Job not found' });
 
     const percentage = job.total > 0 ? Math.round((job.completed / job.total) * 100) : 0;
-
-    res.json({
-        jobId: job.jobId,
-        status: job.status,
-        completed: job.completed,
-        total: job.total,
-        percentage,
-    });
+    res.json({ jobId: job.jobId, status: job.status, completed: job.completed, total: job.total, percentage, errors: job.errors });
 });
 
-/**
- * Background function to process images from CSV
- */
 async function processCsv(filePath, jobId) {
     const imageUrls = [];
 
     fs.createReadStream(filePath)
         .pipe(csvParser())
         .on('data', (row) => {
-            const urlsString = row[Object.keys(row)[2]]; // Column 3
+            const urlsString = row[Object.keys(row)[2]];
             if (urlsString) {
-                const urls = urlsString.split(',').map(url => url.trim()); // Split and clean up
-                imageUrls.push(...urls); // Add all URLs into processing list
+                const urls = urlsString.split(',').map(url => url.trim());
+                imageUrls.push(...urls);
             }
         })
         .on('end', async () => {
@@ -76,7 +52,12 @@ async function processCsv(filePath, jobId) {
 
             try {
                 for (let i = 0; i < imageUrls.length; i++) {
-                    await processImage(imageUrls[i]);
+                    try {
+                        await processImage(imageUrls[i]);
+                    } catch (error) {
+                        console.error(`Failed to process ${imageUrls[i]}:`, error.message);
+                        await Job.updateOne({ jobId }, { $push: { errors: { url: imageUrls[i], error: error.message } } });
+                    }
                     await Job.updateOne({ jobId }, { $set: { completed: i + 1 } });
                 }
                 await Job.updateOne({ jobId }, { $set: { status: 'completed' } });
@@ -89,10 +70,6 @@ async function processCsv(filePath, jobId) {
         });
 }
 
-
-/**
- * Process and compress a single image
- */
 async function processImage(url) {
     const response = await axios.get(url, { responseType: 'arraybuffer' });
     const originalImageBuffer = Buffer.from(response.data);
